@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from report_fixer import Options, display_value, fix_report, read_workbook
-from report_fixer.processor import find_header_row, resolve_sheets
+from report_fixer.processor import find_header_row, is_day_consumption, norm, resolve_sheets
 
 st.set_page_config(page_title="Excel Report Corrector", page_icon="📊", layout="wide")
 
@@ -105,8 +105,31 @@ with st.spinner("Correcting the report…"):
         st.exception(e)
         st.stop()
 
+# ----------------------------------------------------------------- validation
+problems = []
+if len(sheets) != 4:
+    problems.append(f"Expected the 4-sheet report, but this file has {len(sheets)} sheet(s).")
+res_raw, res_tag = resolve_sheets(names, opts)
+if raw_sel != none_opt and not res_raw:
+    problems.append("Raw Aging Stock sheet not found — its columns were not removed. Pick it in the sidebar.")
+if tag_sel != none_opt and not res_tag:
+    problems.append("All TagEnv Aging Stock sheet not found — items were not grouped. Pick it in the sidebar.")
+for s in sheets:
+    if s.name == res_tag and s.groups is None:
+        problems.append(f"'{s.name}': Item Name column not found, so items were not grouped.")
+    elif s.name == res_tag and len(s.group_value_cols) < 2:
+        problems.append(f"'{s.name}': QTN or Holding Days column not found, so its average could not be shown.")
+if convert and not any(s.header and any(h is not None and is_day_consumption(norm(h)) for h in s.header)
+                       for s in sheets):
+    problems.append("No Day Consumption column found — nothing was converted to kg.")
+for s in sheets:
+    if s.header is None and s.rows:
+        problems.append(f"'{s.name}': header row could not be identified; only cleaning and formatting were applied.")
+
 # ----------------------------------------------------------------- result
 base = os.path.splitext(uploaded.name)[0]
+if problems:
+    st.warning("**Please check:**\n\n" + "\n".join(f"- {p}" for p in problems))
 st.success("✅ Report corrected.")
 c1, c2, c3 = st.columns([2, 1, 1])
 with c1:
@@ -160,16 +183,18 @@ for tab, s in zip(tabs, sheets):
             row = list(g.summary)
             row.insert(0, len(g.details))
             summary_rows.append(row)
-        summary_df = _frame(["Records"] + list(s.header), summary_rows)
-        st.caption("Each item appears once. QTN / Holding Days show the average across its records. "
-                   "**Click a row** to see the individual records.")
+        summary_header = ["Records"] + [
+            f"Average {h}" if i in s.group_value_cols else h for i, h in enumerate(s.header)]
+        summary_df = _frame(summary_header, summary_rows)
+        st.caption("Each item appears once, with the average QTN and Holding Days of its records. "
+                   "**Click an item row** to expand all of its individual records.")
         event = st.dataframe(summary_df, width="stretch", hide_index=True, height=420,
                              on_select="rerun", selection_mode="single-row", key=f"grid_{s.name}")
         picked = event.selection.rows if event and hasattr(event, "selection") else []
         if picked:
             g = groups[picked[0]]
-            st.markdown(f"#### {g.item} — {len(g.details)} record(s)")
-            st.dataframe(_frame(s.header, g.details), width="stretch", hide_index=True)
+            with st.expander(f"{g.item} — {len(g.details)} record(s)", expanded=True):
+                st.dataframe(_frame(s.header, g.details), width="stretch", hide_index=True)
         if s.rows:
             st.markdown("**Other rows (totals / unnamed)**")
             st.dataframe(_frame(s.header, s.rows), width="stretch", hide_index=True)

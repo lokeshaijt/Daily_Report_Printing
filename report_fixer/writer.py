@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import io
+import math
 import re
 from typing import List
 
@@ -15,7 +16,7 @@ from openpyxl.worksheet.properties import Outline, PageSetupProperties
 from .processor import Sheet, display_value
 
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
-HEADER_FONT = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+HEADER_FONT = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
 TITLE_FONT = Font(name="Calibri", size=13, bold=True, color="1F4E78")
 BODY_FONT = Font(name="Calibri", size=10)
 GROUP_FILL = PatternFill("solid", fgColor="DDEBF7")
@@ -132,8 +133,23 @@ def _write_sheet(ws, sheet: Sheet) -> None:
         for n, row in enumerate(sheet.rows):
             put_row(row, fill=ZEBRA_FILL if n % 2 else None)
 
-    for i, ln in enumerate(col_len):
-        ws.column_dimensions[get_column_letter(i + 1)].width = max(MIN_WIDTH, min(MAX_WIDTH, ln + 3))
+    col_width = [max(MIN_WIDTH, min(MAX_WIDTH, ln + 3)) for ln in col_len]
+    for i, w in enumerate(col_width):
+        ws.column_dimensions[get_column_letter(i + 1)].width = w
+
+    # Row heights: grow rows whose wrapped text needs more than one line so nothing is cut off
+    if header_row is not None:
+        for row in range(header_row, r):
+            lines = 1
+            for i in range(width):
+                v = ws.cell(row=row, column=i + 1).value
+                if isinstance(v, str) and v:
+                    usable = max(col_width[i] - 2, 1)
+                    lines = max(lines, sum(math.ceil(max(len(p), 1) / usable) for p in v.split("\n")))
+            if row == header_row:
+                ws.row_dimensions[row].height = max(30, 14 * lines + 6)
+            else:
+                ws.row_dimensions[row].height = max(18, 14 * lines + 4)
 
     # Freeze header, filter, and print setup (landscape, fit to page width, repeat header)
     if header_row is not None:

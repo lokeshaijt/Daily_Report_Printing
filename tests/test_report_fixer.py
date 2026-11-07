@@ -98,3 +98,19 @@ def test_days_fallback_without_stock_column():
     rows = values(load_workbook(io.BytesIO(xlsx)).active)
     assert rows[0][1] == "Day Consumption (Kg)"
     assert rows[1] == ["X", 2000, 3]
+
+
+def test_item_rows_without_details_removed_spec_example():
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Item Name", "QTN", "Stock", "Holding Days"])
+    ws.append(["Paper A", 100, 50, 10])
+    ws.append(["Paper B", "NULL", 20, "NULL"])
+    ws.append(["Paper C", "NULL", "NULL", "NULL"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    _, xlsx = fix_report(buf.getvalue(), "x.xlsx")
+    out = load_workbook(io.BytesIO(xlsx)).active
+    rows = values(out)
+    assert [r[0] for r in rows[1:]] == ["Paper A", "Paper B"]
+    assert all(out.row_dimensions[i].height for i in range(1, out.max_row + 1))
