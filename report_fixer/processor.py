@@ -68,10 +68,15 @@ def round_half_up(x: float) -> int:
 
 
 def display_value(v):
-    """Final cell value: decimals rounded, zeros shown as '-'."""
+    """Final cell value: decimals rounded, zeros shown as '-'.
+
+    Values like 0.4 (between -1 and 1, but not zero) are kept exactly as they are.
+    """
     if isinstance(v, bool) or isinstance(v, (dt.date, dt.datetime, dt.time)):
         return v
     if isinstance(v, (int, float)):
+        if v != 0 and -1 < v < 1:
+            return v
         r = round_half_up(v)
         return "-" if r == 0 else r
     return v

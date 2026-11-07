@@ -54,7 +54,10 @@ def _style_cell(cell, value, code_col: bool, bold=False, fill=None, indent=0):
         cell.number_format = "dd-mmm-yyyy"
         cell.alignment = Alignment(horizontal="center", vertical="center")
     elif isinstance(value, (int, float)) and not isinstance(value, bool):
-        cell.number_format = "0" if code_col else "#,##0"
+        if isinstance(value, float) and -1 < value < 1:
+            cell.number_format = "General"  # keep 0.x values exactly as they are
+        else:
+            cell.number_format = "0" if code_col else "#,##0"
         cell.alignment = Alignment(horizontal="right", vertical="center")
     elif value == "-":
         cell.alignment = Alignment(horizontal="center", vertical="center")

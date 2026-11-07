@@ -40,6 +40,7 @@ def make_sample() -> bytes:
     fourth.append(["Name", "Jan", "Feb"])
     fourth.append(["A", 0, 2.6])
     fourth.append(["B", 0.0, "0"])
+    fourth.append(["C", 0.75, -0.2])
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -69,7 +70,7 @@ def test_full_pipeline():
     r = values(wb["Raw Aging Stock"])
     assert r[0] == ["Item Name", "Stock Qty", "Aging Days", "GRN Date"]
     assert r[1][:3] == ["Paper A", 100, 13]
-    assert r[2][:3] == ["Paper B", "-", "-"]
+    assert r[2][:3] == ["Paper B", "-", 0.4]   # 0.x values are kept as they are
 
     # 4: columns removed, grouped with averages, details hidden in an outline
     ws = wb["All TagEnv Aging Stock"]
@@ -85,6 +86,7 @@ def test_full_pipeline():
     f = values(wb["Fourth"])
     assert f[1] == ["A", "-", 3]
     assert f[2] == ["B", "-", "-"]
+    assert f[3] == ["C", 0.75, -0.2]
 
 
 def test_days_fallback_without_stock_column():
