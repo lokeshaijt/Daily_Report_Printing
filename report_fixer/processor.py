@@ -67,16 +67,27 @@ def round_half_up(x: float) -> int:
     return int(Decimal(str(x)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def shorten_decimal(x: float, places: int = 2) -> float:
+    """0.3456 -> 0.35; tiny values keep 2 significant digits (0.0042 -> 0.0042, 0.00456 -> 0.0046)."""
+    d = Decimal(str(x))
+    q = d.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+    if q == 0:  # would turn a non-zero value into 0 -> keep 2 significant digits instead
+        exp = d.adjusted() - 1
+        q = d.quantize(Decimal(1).scaleb(exp), rounding=ROUND_HALF_UP)
+    return int(q) if q == q.to_integral_value() else float(q)  # 0.996 -> 1
+
+
 def display_value(v):
     """Final cell value: decimals rounded, zeros shown as '-'.
 
-    Values like 0.4 (between -1 and 1, but not zero) are kept exactly as they are.
+    Values like 0.4 (between -1 and 1, but not zero) are not rounded to a whole
+    number; long decimals are shortened to 2 decimal places (0.3456 -> 0.35).
     """
     if isinstance(v, bool) or isinstance(v, (dt.date, dt.datetime, dt.time)):
         return v
     if isinstance(v, (int, float)):
         if v != 0 and -1 < v < 1:
-            return v
+            return shorten_decimal(v)
         r = round_half_up(v)
         return "-" if r == 0 else r
     return v

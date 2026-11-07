@@ -41,6 +41,7 @@ def make_sample() -> bytes:
     fourth.append(["A", 0, 2.6])
     fourth.append(["B", 0.0, "0"])
     fourth.append(["C", 0.75, -0.2])
+    fourth.append(["D", 0.3456, 0.00456])
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -87,6 +88,7 @@ def test_full_pipeline():
     assert f[1] == ["A", "-", 3]
     assert f[2] == ["B", "-", "-"]
     assert f[3] == ["C", 0.75, -0.2]
+    assert f[4] == ["D", 0.35, 0.0046]   # long decimals shortened
 
 
 def test_days_fallback_without_stock_column():

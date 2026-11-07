@@ -11,7 +11,7 @@ Upload the stock report downloaded from the portal and get back a corrected, con
 | 3 | **Raw Aging Stock**: removes Lot Code, Lot No, Supplier Lot No, Category, GSM, Qty, Machine Line. |
 | 4 | **All TagEnv Aging Stock**: removes Lot Code, Lot No, Supplier Lot No, Width, GSM, Source Type. Repeated Item Names appear once, with the **average QTN and Holding Days**. In Excel, click **+** beside the item to expand its records. On the website, click the item row. |
 | 5/7 | Zero values are shown as `-` on every sheet, including the 4th sheet. |
-| 6 | Decimals are rounded half-up to whole numbers, except values like 0.4 (between -1 and 1, not zero), which are kept exactly as they are. Averages and calculations use full precision first. |
+| 6 | Decimals are rounded half-up to whole numbers, except values like 0.4 (between -1 and 1, not zero), which are not rounded to a whole number; long decimals are shortened to 2 decimal places (0.3456 → 0.35). Averages and calculations use full precision first. |
 | 8 | Uniform fonts, styled headers, borders, alignment, column widths and row heights sized to the content (no cut-off text), frozen header, filters, and A4 landscape fit-to-width printing with a repeated header row. |
 
 The uploaded file is validated: the website warns if it doesn't have 4 sheets, or if an expected sheet or column (Day Consumption, Item Name, QTN, Holding Days) isn't found. Sheets, header rows and column names are detected automatically, and title rows above the table are kept. If a sheet is detected wrongly, change it in the sidebar.
