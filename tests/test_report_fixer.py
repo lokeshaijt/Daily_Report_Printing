@@ -118,3 +118,39 @@ def test_item_rows_without_details_removed_spec_example():
     rows = values(out)
     assert [r[0] for r in rows[1:]] == ["Paper A", "Paper B"]
     assert all(out.row_dimensions[i].height for i in range(1, out.max_row + 1))
+
+
+def test_printing_report_two_tables_and_zero_only_items():
+    """Mirrors the real 'PRINTING DAILY REPORT' layout: Master Roll table, then a Slitting Process table."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Printing"
+    ws.append(["PRINTING DAILY REPORT - 05 Nov 2026"])
+    ws.append(["Master Roll"])
+    ws.append([])
+    ws.append(["Item Name", "Master Reel Opening in Kgs", "Master Reel Inward in Kgs", "Transfer to Slit in Kgs",
+               "Master Reel Closing in Kgs", "Pending PO Quantity", "Day Consumption", "No of days Consumption"])
+    ws.append(["PAPER 70 GSM", 76960, 0, 0, 76960, 0, 5.77, 13338])
+    ws.append(["PAPER 100 GSM", 0, 0, 0, 0, 0, 0, 0])          # all zeros -> removed
+    ws.append(["PAPER 170 GSM (UC)", 0, None, "NULL", 0, None, None, 0])  # zeros / blanks -> removed
+    ws.append(["PAPER 90 GSM FOIL", 0, 0, 0, 0, 0, 0.07, 0])   # has a day consumption -> kept
+    ws.append(["Grand Total", 76960, 0, 0, 76960, 0, None, None])
+    ws.append(["Slitting Process"])
+    ws.append(["Item Name", "Slit Opening in Kgs", "Slit Inward in Kgs", "Receive from other branch in Kgs",
+               "Transfer to other branch in Kgs", "Transfer to Printing (Consumbtion)", "Wastage",
+               "Wastage Percentage", "Closing stock in Kgs"])
+    ws.append(["PAPER 70 GSM (PIGMENT)", 510, 715, 0, 0, 510, 11.02, 2.16, 704])
+    ws.append(["PAPER 80 GSM", 0, 0, 0, 0, 0, 0, 0, 0])         # all zeros -> removed
+    buf = io.BytesIO()
+    wb.save(buf)
+    sheets, xlsx = fix_report(buf.getvalue(), "p.xlsx")
+    rows = values(load_workbook(io.BytesIO(xlsx)).active)
+    items = [r[0] for r in rows]
+    assert "PAPER 100 GSM" not in items and "PAPER 170 GSM (UC)" not in items and "PAPER 80 GSM" not in items
+    assert "PAPER 90 GSM FOIL" in items and "Grand Total" in items and "Slitting Process" in items
+    main = rows[items.index("PAPER 70 GSM")]
+    assert main[6:8] == [5770, 13]                       # tons -> kg, days = closing / kg
+    assert rows[items.index("PAPER 90 GSM FOIL")][6] == 70
+    slit = rows[items.index("PAPER 70 GSM (PIGMENT)")]
+    assert slit[6:9] == [11, 2, 704]                      # second table NOT treated as Day Consumption
+    assert rows[items.index("Slitting Process") + 1][0] == "Item Name"

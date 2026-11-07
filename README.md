@@ -6,7 +6,7 @@ Upload the stock report downloaded from the portal and get back a corrected, con
 
 | # | Rule |
 |---|------|
-| 1 | Removes rows where the **Item Name has no value in any other column** (all empty / `NULL`), plus fully empty rows. Rows with at least one other value are kept unchanged. |
+| 1 | Removes rows where the **Item Name has no value in any other column** (all empty, `NULL` or zero), plus fully empty rows. Grand Total rows and section titles are kept. Sheets with several tables (e.g. Master Roll and Slitting Process) are handled table by table, each with its own header. Rows with at least one other value are kept unchanged. |
 | 2 | **Day Consumption** tons → kg (×1000, header renamed `… (Kg)`); **No. of Days Consumption** recalculated as `Stock ÷ Day Consumption (Kg)`. If no stock column exists, the old value is divided by 1000. |
 | 3 | **Raw Aging Stock**: removes Lot Code, Lot No, Supplier Lot No, Category, GSM, Qty, Machine Line. |
 | 4 | **All TagEnv Aging Stock**: removes Lot Code, Lot No, Supplier Lot No, Width, GSM, Source Type. Repeated Item Names appear once, with the **average QTN and Holding Days**. In Excel, click **+** beside the item to expand its records. On the website, click the item row. |

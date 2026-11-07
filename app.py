@@ -137,7 +137,8 @@ with c1:
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        type="primary", width="stretch")
 c2.metric("Sheets", len(sheets))
-c3.metric("Data rows", sum(len(s.rows) + sum(len(g.details) for g in (s.groups or [])) for s in sheets))
+c3.metric("Data rows", sum(len(s.rows) + sum(len(g.details) for g in (s.groups or []))
+                           + sum(len(sec.rows) for sec in s.sections) for s in sheets))
 
 
 def _frame(header, rows):
@@ -172,7 +173,13 @@ for tab, s in zip(tabs, sheets):
             st.write("_Empty sheet_")
             continue
         if s.groups is None:
-            st.dataframe(_frame(s.header, s.rows), width="stretch", hide_index=True, height=480)
+            st.dataframe(_frame(s.header, s.rows), width="stretch", hide_index=True,
+                         height=480 if not s.sections else "auto")
+            for sec in s.sections:
+                title = next((str(c) for t in sec.title_rows for c in t if c is not None), "")
+                if title:
+                    st.markdown(f"**{title}**")
+                st.dataframe(_frame(sec.header, sec.rows), width="stretch", hide_index=True)
             continue
 
         # Grouped TagEnv view: one row per item; click a row to see its records.

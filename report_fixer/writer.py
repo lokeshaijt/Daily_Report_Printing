@@ -19,6 +19,7 @@ HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
 TITLE_FONT = Font(name="Calibri", size=13, bold=True, color="1F4E78")
 BODY_FONT = Font(name="Calibri", size=10)
+SECTION_FONT = Font(name="Calibri", size=12, bold=True, color="1F4E78")
 GROUP_FILL = PatternFill("solid", fgColor="DDEBF7")
 GROUP_FONT = Font(name="Calibri", size=10, bold=True)
 ZEBRA_FILL = PatternFill("solid", fgColor="F7F9FC")
@@ -89,14 +90,21 @@ def _write_sheet(ws, sheet: Sheet) -> None:
         r += 1  # spacer
 
     header_row = None
-    if sheet.header is not None:
-        header_row = r
-        for i, h in enumerate(header):
+    header_rows = set()
+    section_title_rows = set()
+
+    def put_header(hdr):
+        nonlocal r
+        for i, h in enumerate(hdr):
             c = ws.cell(row=r, column=i + 1, value=h)
             c.font, c.fill, c.border = HEADER_FONT, HEADER_FILL, BORDER
             c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             col_len[i] = max(col_len[i], min(_text_len(h), 18))
-        ws.row_dimensions[r].height = 32
+        header_rows.add(r)
+
+    if sheet.header is not None:
+        header_row = r
+        put_header(header)
         if sheet.groups is not None:
             for ci in sheet.group_value_cols:
                 ws.cell(row=r, column=ci + 1).comment = Comment(
@@ -135,6 +143,30 @@ def _write_sheet(ws, sheet: Sheet) -> None:
     else:
         for n, row in enumerate(sheet.rows):
             put_row(row, fill=ZEBRA_FILL if n % 2 else None)
+    main_end = r - 1
+
+    # Further tables on the same sheet (e.g. "Slitting Process"), each with its own header
+    for sec in sheet.sections:
+        r += 1  # spacer
+        for t in sec.title_rows:
+            for i, v in enumerate(t):
+                if v is not None:
+                    c = ws.cell(row=r, column=i + 1, value=display_value(v))
+                    c.font = SECTION_FONT
+                    c.alignment = Alignment(horizontal="left", vertical="center")
+            ws.row_dimensions[r].height = 20
+            section_title_rows.add(r)
+            r += 1
+        sec_codes = {i for i, h in enumerate(sec.header or []) if _is_code_column(h)}
+        put_header(sec.header)
+        r += 1
+        for n, row in enumerate(sec.rows):
+            for i in range(width):
+                v = display_value(row[i]) if i < len(row) else None
+                c = ws.cell(row=r, column=i + 1, value=v)
+                _style_cell(c, v, i in sec_codes, fill=ZEBRA_FILL if n % 2 else None)
+                col_len[i] = max(col_len[i], _text_len(v))
+            r += 1
 
     col_width = [max(MIN_WIDTH, min(MAX_WIDTH, ln + 3)) for ln in col_len]
     for i, w in enumerate(col_width):
@@ -143,13 +175,15 @@ def _write_sheet(ws, sheet: Sheet) -> None:
     # Row heights: grow rows whose wrapped text needs more than one line so nothing is cut off
     if header_row is not None:
         for row in range(header_row, r):
+            if row in section_title_rows:
+                continue
             lines = 1
             for i in range(width):
                 v = ws.cell(row=row, column=i + 1).value
                 if isinstance(v, str) and v:
                     usable = max(col_width[i] - 2, 1)
                     lines = max(lines, sum(math.ceil(max(len(p), 1) / usable) for p in v.split("\n")))
-            if row == header_row:
+            if row in header_rows:
                 ws.row_dimensions[row].height = max(30, 14 * lines + 6)
             else:
                 ws.row_dimensions[row].height = max(18, 14 * lines + 4)
@@ -157,9 +191,8 @@ def _write_sheet(ws, sheet: Sheet) -> None:
     # Freeze header, filter, and print setup (landscape, fit to page width, repeat header)
     if header_row is not None:
         ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
-        last = r - 1
-        if sheet.groups is None and last > header_row:
-            ws.auto_filter.ref = f"A{header_row}:{get_column_letter(width)}{last}"
+        if sheet.groups is None and main_end > header_row:
+            ws.auto_filter.ref = f"A{header_row}:{get_column_letter(width)}{main_end}"
         ws.print_title_rows = f"{header_row}:{header_row}"
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
     ws.page_setup.orientation = "landscape"

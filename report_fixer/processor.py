@@ -156,10 +156,14 @@ class Sheet:
     group_value_cols: List[int] = field(default_factory=list)
     item_col: Optional[int] = None
     notes: List[str] = field(default_factory=list)
+    # further tables on the same sheet (e.g. "Slitting Process" below "Master Roll"),
+    # each with its own section title (title_rows), header and rows
+    sections: List["Sheet"] = field(default_factory=list)
 
     @property
     def width(self) -> int:
         widths = [len(self.header or [])] + [len(r) for r in self.rows + self.title_rows]
+        widths += [sec.width for sec in self.sections]
         return max(widths) if widths else 0
 
 
@@ -200,7 +204,7 @@ def is_days_consumption(n: str) -> bool:
 
 
 _STOCK_PRIORITY = ("closingstock", "currentstock", "stockqty", "stockinhand", "balanceqty",
-                   "availableqty", "stock", "qtn", "qty", "quantity")
+                   "availableqty", "closing", "stock", "qtn", "qty", "quantity")
 
 
 def find_stock_col(header: list, exclude: set) -> Optional[int]:
@@ -209,7 +213,7 @@ def find_stock_col(header: list, exclude: set) -> Optional[int]:
         for i, n in keys:
             if n == wanted or n.startswith(wanted):
                 return i
-    for wanted in _STOCK_PRIORITY[:7]:
+    for wanted in _STOCK_PRIORITY[:8]:
         for i, n in keys:
             if wanted in n:
                 return i
@@ -219,11 +223,12 @@ def find_stock_col(header: list, exclude: set) -> Optional[int]:
 # --------------------------------------------------------------------------- #
 # Rules
 # --------------------------------------------------------------------------- #
-def drop_columns(sheet: Sheet, names: List[str]) -> None:
+def drop_columns(sheet: Sheet, names: List[str], quiet: bool = False) -> None:
     keys = _drop_keys(names)
     idx = [i for i, h in enumerate(sheet.header) if h is not None and norm(h) in keys]
     if not idx:
-        sheet.notes.append("None of the columns to remove were found: " + ", ".join(names))
+        if not quiet:
+            sheet.notes.append("None of the columns to remove were found: " + ", ".join(names))
         return
     removed = [str(sheet.header[i]) for i in idx]
     keep = [i for i in range(len(sheet.header)) if i not in idx]
@@ -232,7 +237,7 @@ def drop_columns(sheet: Sheet, names: List[str]) -> None:
     sheet.notes.append("Removed columns: " + ", ".join(removed))
     removed_keys = {norm(r) for r in removed}
     missing = [n for n in names if not (_drop_keys([n]) & removed_keys)]
-    if missing:
+    if missing and not quiet:
         sheet.notes.append("Not present (nothing to remove): " + ", ".join(missing))
 
 
@@ -370,20 +375,73 @@ def build_sheet(name: str, rows: List[list]) -> Sheet:
     kept = [list(r) for r in body if not all(is_blank(c) for c in r)]
     removed = len(body) - len(kept)
     # numeric text -> numbers so they can be rounded / formatted
-    sheet.rows = [[(to_number(c) if to_number(c) is not None else c) for c in r] for r in kept]
+    kept = [[(to_number(c) if to_number(c) is not None else c) for c in r] for r in kept]
     if removed:
         sheet.notes.append(f"Removed {removed} completely empty rows.")
+    _split_sections(sheet, kept)
     return sheet
 
 
+_SECTION_HINTS = ("item", "name", "kgs", "qty", "qtn", "stock", "consumption", "days", "opening", "closing",
+                  "inward", "transfer", "wastage", "percentage", "receive", "pending", "code", "uom")
+
+
+def _is_sub_header(row: list) -> bool:
+    """A repeated header row inside the sheet that starts another table."""
+    filled = [c for c in row if not is_blank(c)]
+    if len(filled) < 3 or not all(isinstance(c, str) for c in filled):
+        return False
+    return sum(1 for c in filled if any(h in norm(c) for h in _SECTION_HINTS)) >= 2
+
+
+def _is_section_title(row: list) -> bool:
+    filled = [c for c in row if not is_blank(c)]
+    return len(filled) == 1 and isinstance(filled[0], str)
+
+
+def _split_sections(sheet: Sheet, rows: List[list]) -> None:
+    current = sheet
+    for r in rows:
+        if _is_sub_header(r):
+            title = []
+            if current.rows and _is_section_title(current.rows[-1]):
+                title = [current.rows.pop()]
+            current = Sheet(name=sheet.name, title_rows=title, header=list(r))
+            sheet.sections.append(current)
+            continue
+        current.rows.append(r)
+
+
+def _section_label(sec: Sheet) -> str:
+    for r in sec.title_rows:
+        for c in r:
+            if not is_blank(c):
+                return str(c)
+    return "next table"
+
+
+def _apply_to_sections(sheet: Sheet, fn, *args) -> None:
+    for sec in sheet.sections:
+        fn(sec, *args)
+        label = _section_label(sec)
+        sheet.notes.extend(f"[{label}] {n}" for n in sec.notes)
+        sec.notes.clear()
+
+
+def _no_value(v) -> bool:
+    """Empty, NULL, zero or a '-' placeholder: nothing to show."""
+    return is_blank(v) or to_number(v) == 0 or (isinstance(v, str) and v.strip() in {"-", "--"})
+
+
 def drop_item_only_rows(sheet: Sheet) -> None:
-    """Remove rows that have an Item Name but no value in any other column."""
+    """Remove rows that have an Item Name but no value (only blanks / NULL / zeros) in every other column."""
     ic = _item_col(sheet.header)
     if ic is None:
         return
     before = len(sheet.rows)
     sheet.rows = [r for r in sheet.rows
-                  if is_blank(r[ic]) or not all(is_blank(c) for i, c in enumerate(r) if i != ic)]
+                  if is_blank(r[ic]) or "total" in norm(r[ic])
+                  or not all(_no_value(c) for i, c in enumerate(r) if i != ic)]
     removed = before - len(sheet.rows)
     if removed:
         sheet.notes.append(f"Removed {removed} rows where '{sheet.header[ic]}' had no values in any other column.")
@@ -407,13 +465,17 @@ def process(sheets: List[SheetRows], opts: Optional[Options] = None) -> List[She
     for name, rows in sheets:
         sheet = build_sheet(name, rows)
         if sheet.header is not None:
-            if name == raw_name:
-                drop_columns(sheet, RAW_AGING_DROP)
-            if name == tag_name:
-                drop_columns(sheet, TAGENV_DROP)
+            # every table on the sheet is checked against its own header row
+            for target in [sheet] + sheet.sections:
+                if name == raw_name:
+                    drop_columns(target, RAW_AGING_DROP, quiet=target is not sheet)
+                if name == tag_name:
+                    drop_columns(target, TAGENV_DROP, quiet=target is not sheet)
             drop_item_only_rows(sheet)
+            _apply_to_sections(sheet, drop_item_only_rows)
             if opts.convert_day_consumption:
                 convert_day_consumption(sheet, opts)
+                _apply_to_sections(sheet, convert_day_consumption, opts)
             if name == tag_name:
                 group_items(sheet)
         out.append(sheet)
