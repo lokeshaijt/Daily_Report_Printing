@@ -360,6 +360,19 @@ def build_sheet(name: str, rows: List[list]) -> Sheet:
     return sheet
 
 
+def drop_item_only_rows(sheet: Sheet) -> None:
+    """Remove rows that have an Item Name but no value in any other column."""
+    ic = _item_col(sheet.header)
+    if ic is None:
+        return
+    before = len(sheet.rows)
+    sheet.rows = [r for r in sheet.rows
+                  if is_blank(r[ic]) or not all(is_blank(c) for i, c in enumerate(r) if i != ic)]
+    removed = before - len(sheet.rows)
+    if removed:
+        sheet.notes.append(f"Removed {removed} rows where '{sheet.header[ic]}' had no values in any other column.")
+
+
 def resolve_sheets(names: List[str], opts: Options):
     """None -> auto-detect by sheet name, "" -> rule disabled, otherwise the named sheet."""
     def pick(choice, detect):
@@ -382,6 +395,7 @@ def process(sheets: List[SheetRows], opts: Optional[Options] = None) -> List[She
                 drop_columns(sheet, RAW_AGING_DROP)
             if name == tag_name:
                 drop_columns(sheet, TAGENV_DROP)
+            drop_item_only_rows(sheet)
             if opts.convert_day_consumption:
                 convert_day_consumption(sheet, opts)
             if name == tag_name:

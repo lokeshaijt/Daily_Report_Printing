@@ -18,6 +18,7 @@ def make_sample() -> bytes:
     ws.append(["1002", "Board", 0, 0.5, 0])
     ws.append(["NULL", None, "", None, None])                   # NULL/empty -> removed
     ws.append(["1003", None, 1234.567, None, None])            # partially empty -> kept
+    ws.append([None, "Empty Item", None, "NULL", None])         # item name only -> removed
 
     raw = wb.create_sheet("Raw Aging Stock")
     raw.append(["Item Name", "Lot Code", "Lot No", "Supplier Lot No", "Category", "GSM", "Qty",
@@ -32,6 +33,8 @@ def make_sample() -> bytes:
     tag.append(["Film Y", "b", "2", "s", 100, 50, "PO", "KG", 7, 3, "R2"])
     tag.append(["Film X", "c", "3", "s", 100, 50, "PO", "KG", 21, 8, "R3"])
     tag.append([None] * 11)
+    tag.append(["Film Z", "d", "4", "s", 100, 50, "PO", None, None, None, None])  # only removed cols -> dropped
+    tag.append(["Film X", None, None, None, None, None, None, None, None, "NULL", None])  # item only -> dropped
 
     fourth = wb.create_sheet("Fourth")
     fourth.append(["Name", "Jan", "Feb"])
